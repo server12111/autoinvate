@@ -16,6 +16,9 @@ pip install -r requirements.txt
 copy .env.example .env   # BOT_TOKEN, API_ID, API_HASH, ADMIN_IDS
 python main.py
 ```
+На хостинге задайте `DATA_DIR` — папку, которая сохраняется при перезапуске (например `/app/data`):
+там лежат база, сессии аккаунтов и эмодзи.
+
 Дальше: `/admin` → Реквизиты (адреса) → Тарифы.
 
 ## Структура

@@ -27,12 +27,16 @@ ADMIN_IDS: set[int] = {
 }
 SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "").lstrip("@")
 
-DB_PATH = Path(os.getenv("DB_PATH", "data/invite.db"))
-if not DB_PATH.is_absolute():
-    DB_PATH = BASE_DIR / DB_PATH
-SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", "sessions"))
-if not SESSIONS_DIR.is_absolute():
-    SESSIONS_DIR = BASE_DIR / SESSIONS_DIR
+def _path(value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+# Всё, что нужно сохранять между перезапусками (база, сессии аккаунтов, эмодзи), лежит в одной
+# папке. На хостинге задайте DATA_DIR=/app/data (или папку, которую он сохраняет).
+DATA_DIR = _path(os.getenv("DATA_DIR", "data"))
+DB_PATH = _path(os.getenv("DB_PATH") or str(DATA_DIR / "invite.db"))
+SESSIONS_DIR = _path(os.getenv("SESSIONS_DIR") or str(DATA_DIR / "sessions"))
 
 DAILY_INVITE_LIMIT = _int("DAILY_INVITE_LIMIT", 40)
 MAX_CONCURRENT_TASKS = _int("MAX_CONCURRENT_TASKS", 3)
