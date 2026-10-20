@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import secrets
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, or_, select, update
@@ -10,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 import config
 from database import models as m
 from database.models import (
-    MEMO_METHODS, UNLIMITED, Account, InviteLog, Order, OrderStatus, PaymentMethod, Plan, Promocode,
+    UNLIMITED, Account, InviteLog, Order, OrderStatus, PaymentMethod, Plan, Promocode,
     PromocodeActivation, PromoType, Task, TaskStatus, User, fmt_usd,
 )
 
@@ -346,10 +345,7 @@ async def add_log(task_id: int, account_id: int | None, target: str, result: str
 
 def format_amount(method: PaymentMethod, cents: int) -> str:
     if method.rate > 0:
-        value = cents / 100 * method.rate
-        digits = 8 if method.currency == "BTC" else 2
-        text = f"{value:.{digits}f}".rstrip("0").rstrip(".") if digits > 2 else f"{value:.2f}"
-        return f"{text} {method.currency}"
+        return _fmt(cents / 100 * method.rate, method)
     return f"{fmt_usd(cents)} в {method.currency}"
 
 
@@ -387,47 +383,51 @@ async def create_order(user_id: int, plan_id: int, method_key: str) -> Order | N
         method = await s.get(PaymentMethod, method_key)
         if not (user and plan and method and method.enabled and method.address):
             return None
-        if method.key not in MEMO_METHODS and method.rate <= 0:
+        if method.rate <= 0:
             return None  # без курса точную сумму не посчитать (курс ещё не подтянулся)
         discount = min(plan.price, user.discount)
         amount = plan.price - discount
-        if method.key not in MEMO_METHODS:
-            amount = await _unique_amount(s, method.key, amount)
         order = Order(user_id=user_id, plan_id=plan.id, plan_name=plan.name, days=plan.duration_days,
                       invites=plan.invite_limit, discount=discount, amount_usd=amount,
-                      method=method.key, amount_text=format_amount(method, amount),
+                      method=method.key, amount_text=await _unique_amount_text(s, method, amount),
                       address=method.address)
         s.add(order)
-        await s.flush()  # нужен id заявки
-        order.memo = make_memo(order.id) if method.key in MEMO_METHODS else None
         await s.commit()
         return order
 
 
-async def _unique_amount(s, method_key: str, cents: int) -> int:
-    """Сдвигает сумму на 1–99 центов так, чтобы она не совпала ни с одной открытой заявкой
-    этого способа: по точной сумме админ поймёт, от кого платёж."""
+def _decimals(method: PaymentMethod) -> int:
+    return 8 if method.currency == "BTC" else 2
+
+
+def _fmt(value: float, method: PaymentMethod) -> str:
+    d = _decimals(method)
+    text = f"{value:.{d}f}"
+    if d > 2:
+        text = text.rstrip("0").rstrip(".")
+    return f"{text} {method.currency}"
+
+
+async def _unique_amount_text(s, method: PaymentMethod, cents: int) -> str:
+    """Сумма в валюте оплаты, сдвинутая на 1–99 мельчайших единиц (копеек / центов / сатоши),
+    чтобы не совпасть ни с одной открытой заявкой: по точной сумме видно, от кого платёж.
+    Комментарий к переводу не нужен."""
     taken = set((await s.execute(
-        select(Order.amount_usd).where(
-            Order.method == method_key,
+        select(Order.amount_text).where(
+            Order.method == method.key,
             or_(Order.status == OrderStatus.PENDING,
                 # брошенные заявки (реквизиты показали, «Я оплатил» не нажали) держат сумму сутки
                 (Order.status == OrderStatus.NEW) & (Order.created_at > m.utcnow() - timedelta(days=1))))
     )).scalars())
-    sign = -1 if cents > 100 else 1  # обычно чуть дешевле; у копеечных сумм — чуть дороже
-    for off in range(1, 100):  # ближайшая свободная сумма: $9.98, $9.97, …
-        if cents + sign * off not in taken:
-            return cents + sign * off
-    return cents + sign * 99  # 99 открытых заявок с одной ценой — маловероятно
-
-
-_MEMO_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # без похожих 0/O, 1/I
-
-
-def make_memo(order_id: int) -> str:
-    """Уникальный код платежа: номер заявки + случайный хвост (чтобы не подобрать чужой)."""
-    tail = "".join(secrets.choice(_MEMO_ALPHABET) for _ in range(4))
-    return f"P{order_id}-{tail}"
+    d = _decimals(method)
+    unit = 10 ** d
+    base = round(cents / 100 * method.rate * unit)  # в мельчайших единицах
+    sign = -1 if base > 100 else 1  # обычно чуть дешевле; у копеечных сумм — чуть дороже
+    for off in range(1, 100):  # ближайшая свободная: 450.78, 450.77, …
+        text = _fmt((base + sign * off) / unit, method)
+        if text not in taken:
+            return text
+    return _fmt((base + sign * 99) / unit, method)  # 99 открытых заявок с одной ценой — маловероятно
 
 
 async def get_order(order_id: int) -> Order | None:

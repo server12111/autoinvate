@@ -142,11 +142,6 @@ class PaymentMethod(Base):
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
-# Где в переводе можно написать комментарий. В остальных сетях MEMO нет —
-# платёж опознаётся по уникальной сумме.
-MEMO_METHODS = {"uah", "ton"}
-
-
 DEFAULT_METHODS = [
     # key, title, currency, rate, sort
     ("uah", "Карта (грн)", "грн", 41.0, 1),

@@ -61,12 +61,11 @@ async def buy_plan(cb: CallbackQuery, state: FSMContext) -> None:
 # ───────────────────────────── заявка ─────────────────────────────
 
 def order_details(order: Order) -> str:
-    memo = (f"\n{e('tag')} Комментарий / MEMO: <b><code>{html.escape(order.memo)}</code></b>"
-            if order.memo else "")
     return (f"<blockquote>{e('fire')} Тариф: <b>{html.escape(order.plan_name)}</b>\n"
-            f"{e('money')} К оплате: <b>{html.escape(order.amount_text)}</b>"
+            f"{e('money')} К оплате: <b><code>{html.escape(order.amount_text.split()[0])}</code> "
+            f"{html.escape(order.amount_text.split()[1])}</b>"
             f"{f' ({fmt_usd(order.amount_usd)})' if '$' not in order.amount_text else ''}\n"
-            f"{e('wallet')} Адрес / карта: <code>{html.escape(order.address)}</code>{memo}</blockquote>")
+            f"{e('wallet')} Адрес / карта: <code>{html.escape(order.address)}</code></blockquote>")
 
 
 @router.callback_query(F.data.regexp(r"^pay:\d+:\w+$"))
@@ -77,13 +76,9 @@ async def pay(cb: CallbackQuery, state: FSMContext) -> None:
     if order is None:
         return await cb.answer("Этот способ оплаты сейчас недоступен.", show_alert=True)
     method = await q.get_method(method_key)
-    if order.memo:
-        warn = (f"{e('warn')} <b>Обязательно укажите комментарий / MEMO <code>{html.escape(order.memo)}</code></b> "
-                "в переводе — по нему мы поймём, что оплата от вас.")
-    else:
-        warn = (f"{e('warn')} <b>Переведите ровно {html.escape(order.amount_text)}</b> — сумма уникальна "
-                "для вашей заявки, по ней мы найдём платёж. Комиссию сети и биржи оплачивайте сверху: "
-                "на адрес должна прийти именно эта сумма.")
+    warn = (f"{e('warn')} <b>Переведите ровно {html.escape(order.amount_text)}</b> — до копейки. "
+            "Сумма уникальна для вашей заявки, по ней мы найдём платёж, поэтому комментарий писать "
+            "не нужно. Комиссию банка / сети оплачивайте сверху: прийти должна именно эта сумма.")
     text = (f"{e('receipt')} <b>Заявка #{order.id}</b> · {html.escape(method.title)}\n\n"
             f"{order_details(order)}\n\n{warn}\n\n"
             "Данные копируются нажатием. После перевода нажмите <b>«Я оплатил»</b> — "
@@ -135,7 +130,7 @@ def admin_order_text(order: Order, tg_user=None, user_tg_id: int | None = None) 
             f"{e('money')} <b>{html.escape(order.amount_text)}</b> ({fmt_usd(order.amount_usd)}) · "
             f"{html.escape(order.method)}\n"
             f"{e('wallet')} <code>{html.escape(order.address)}</code>"
-            f"{f' · MEMO <code>{html.escape(order.memo)}</code>' if order.memo else ''}\n"
+
             f"{e('calendar')} Оплачено: {paid}")
 
 

@@ -19,7 +19,7 @@ from bot.states import AddPlanFSM, AddPromoFSM, EmojiFSM, GrantFSM, MethodFSM
 from bot.ui import e
 from core import rates as rates_mod
 from database import queries as q
-from database.models import MEMO_METHODS, OrderStatus, PromoType, fmt_usd
+from database.models import OrderStatus, PromoType, fmt_usd
 
 
 class IsAdmin(BaseFilter):
@@ -304,18 +304,12 @@ async def promo_limit(message: Message, state: FSMContext, bot: Bot) -> None:
 
 _FIELD_PROMPTS = {
     "address": "Отправьте <b>адрес кошелька</b> или <b>номер карты</b> для этого способа:",
-    "rate": "Сколько <b>{currency}</b> брать за <b>$1</b>? Например <code>41.5</code>.\n"
-            "<code>0</code> — показывать сумму в $ (оплата эквивалентом).",
+    "rate": "Сколько <b>{currency}</b> брать за <b>$1</b>? Например <code>41.5</code>.",
 }
 
 
 def _method_kb(method):
     return kb.admin_method(method, method.key in rates_mod.AUTO_SOURCES, rates_mod.is_auto(method))
-
-
-def _ident(method) -> str:
-    return ("MEMO, создаётся для каждой заявки" if method.key in MEMO_METHODS
-            else "уникальная сумма (в этой сети нет MEMO)")
 
 
 def _method_card(method, prefix: str = "") -> str:
@@ -327,18 +321,16 @@ def _method_card(method, prefix: str = "") -> str:
     elif method.key in rates_mod.AUTO_SOURCES:
         rate += " · вручную"
     example = q.format_amount(method, 1000)
-    if method.key not in MEMO_METHODS:
-        example += " (−1…99 центов)"
+    example += " (минус 1–99 мельчайших единиц)"
     body = (f"<blockquote>Статус: <b>{status}</b>\n"
             f"{e('wallet')} Адрес: <code>{html.escape(method.address or '—')}</code>\n"
-            f"{e('tag')} Опознание платежа: <b>{_ident(method)}</b>\n"
+            f"{e('tag')} Опознание платежа: <b>уникальная сумма</b>, без комментария\n"
             f"{e('money')} Курс: <b>{rate}</b>\n"
             f"{e('fire')} Тариф за $10 → <b>{html.escape(example)}</b></blockquote>")
     if not method.address:
         body += f"\n\n{e('warn')} Укажите адрес — без него способ не показывается клиентам."
-    if method.key not in MEMO_METHODS and method.rate <= 0:
-        body += (f"\n\n{e('warn')} Укажите курс: в этой сети нет MEMO, платёж опознаётся по точной "
-                 f"сумме в {method.currency}.")
+    if method.rate <= 0:
+        body += (f"\n\n{e('warn')} Укажите курс: платёж опознаётся по точной сумме в {method.currency}.")
     text = _h("wallet", method.title, body)
     return f"{prefix}\n\n{text}" if prefix else text
 
@@ -350,9 +342,9 @@ async def _methods_screen(event, state: FSMContext, prefix: str = "") -> None:
     text = _h("wallet", "Реквизиты для оплаты",
               f"Включено способов: <b>{on}/{len(methods)}</b>\n\n"
               "Нажмите на способ, чтобы указать адрес и курс.\n\n"
-              f"{e('tag')} Карта и TON: бот создаёт MEMO для каждой заявки.\n"
-              f"{e('money')} TRC20, ERC20, BEP20, BTC: в этих сетях нет комментария, поэтому "
-              "бот выставляет уникальную сумму: на несколько центов меньше ($9.98, $9.97…).")
+              f"{e('money')} Комментарий к переводу не нужен: бот выставляет каждой заявке "
+              "уникальную сумму — на несколько копеек / центов меньше (450.78, 450.77…). "
+              "По точной сумме видно, от кого платёж.")
     await show(event, state, f"{prefix}\n\n{text}" if prefix else text, kb.admin_methods(methods))
 
 
@@ -377,7 +369,7 @@ async def method_toggle(cb: CallbackQuery, state: FSMContext) -> None:
         return await _methods_screen(cb, state)
     if not method.enabled and not method.address:
         return await cb.answer("Сначала укажите адрес.", show_alert=True)
-    if not method.enabled and method.key not in MEMO_METHODS and method.rate <= 0:
+    if not method.enabled and method.rate <= 0:
         # без курса клиент сам пересчитает $ → сумма на кошельке не совпадёт с заявкой
         return await cb.answer(f"Сначала укажите курс: сколько {method.currency} за $1. "
                                "В этой сети платёж опознаётся по точной сумме.", show_alert=True)
@@ -432,11 +424,11 @@ async def method_value(message: Message, state: FSMContext, bot: Bot) -> None:
             value = float(raw.replace(",", "."))
             if not 0 <= value <= 10**7:
                 raise ValueError
-            if value == 0 and key not in MEMO_METHODS:
+            if value == 0:
                 return await edit_menu(bot, state, message.chat.id,
                                        _h("wallet", method.title,
-                                          f"{e('warn')} В этой сети нет MEMO — нужен точный курс, "
-                                          f"иначе платёж не опознать. Сколько {method.currency} за $1?"),
+                                          f"{e('warn')} Нужен точный курс, иначе платёж не опознать по сумме. "
+                                          f"Сколько {method.currency} за $1?"),
                                        kb.admin_cancel(f"adm:method:{key}"))
         except ValueError:
             return await edit_menu(bot, state, message.chat.id,

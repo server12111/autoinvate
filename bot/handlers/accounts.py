@@ -79,9 +79,10 @@ def _login_head(step: str) -> str:
 
 def _phone_screen(error: str = "") -> str:
     err = f"{e('warn')} {html.escape(error)}\n\n" if error else ""
-    return (f"{_login_head('1/3')}\n\n{err}Отправьте номер телефона аккаунта сообщением "
-            "в международном формате:\n\n"
-            "<blockquote><code>+380991234567</code></blockquote>")
+    return (f"{_login_head('1/3')}\n\n{err}Отправьте номер телефона аккаунта сообщением — "
+            "можно с <code>+</code> или без:\n\n"
+            "<blockquote><code>380991234567</code>\n<code>+380991234567</code>\n"
+            "<code>0991234567</code> (украинский номер)</blockquote>")
 
 
 def _code_screen(phone: str, pad: str, error: str = "") -> str:
@@ -146,14 +147,23 @@ async def _once(state: FSMContext, coro) -> None:
         await state.update_data(busy=False)
 
 
+def normalize_phone(raw: str) -> str | None:
+    """«+380 99 123-45-67», «380991234567», «0991234567» → «+380991234567»; None — не номер."""
+    digits = re.sub(r"[\s\-().+]", "", raw)
+    if digits.startswith("00"):          # 00380… — международный префикс
+        digits = digits[2:]
+    elif len(digits) == 10 and digits.startswith("0"):  # местный украинский формат 0XX…
+        digits = "38" + digits
+    return "+" + digits if _PHONE_RE.match(digits) else None
+
+
 async def _submit_phone(bot: Bot, state: FSMContext, chat_id: int, tg_id: int, raw: str,
                         pool: AccountPool) -> None:
-    phone = re.sub(r"[\s\-()+]", "", raw)
-    if not _PHONE_RE.match(phone):
+    phone = normalize_phone(raw)
+    if phone is None:
         await state.update_data(pad="")
-        return await edit_menu(bot, state, chat_id, _phone_screen("Неверный номер. Пример: +380991234567"),
+        return await edit_menu(bot, state, chat_id, _phone_screen("Неверный номер. Пример: 380991234567"),
                                kb.cancel("acc:menu"))
-    phone = "+" + phone
     await edit_menu(bot, state, chat_id, f"{_login_head('1/3')}\n\n{e('clock')} Отправляю код на {phone}…",
                     kb.cancel("acc:menu"))
     user = await q.get_or_create_user(tg_id)
