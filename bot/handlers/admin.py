@@ -324,7 +324,7 @@ def _method_card(method, prefix: str = "") -> str:
     example += " (минус 1–99 мельчайших единиц)"
     body = (f"<blockquote>Статус: <b>{status}</b>\n"
             f"{e('wallet')} Адрес: <code>{html.escape(method.address or '—')}</code>\n"
-            f"{e('tag')} Опознание платежа: <b>уникальная сумма</b>, без комментария\n"
+            f"{e('tag')} Опознание платежа: <b>уникальная сумма</b>\n"
             f"{e('money')} Курс: <b>{rate}</b>\n"
             f"{e('fire')} Тариф за $10 → <b>{html.escape(example)}</b></blockquote>")
     if not method.address:
@@ -342,7 +342,7 @@ async def _methods_screen(event, state: FSMContext, prefix: str = "") -> None:
     text = _h("wallet", "Реквизиты для оплаты",
               f"Включено способов: <b>{on}/{len(methods)}</b>\n\n"
               "Нажмите на способ, чтобы указать адрес и курс.\n\n"
-              f"{e('money')} Комментарий к переводу не нужен: бот выставляет каждой заявке "
+              f"{e('money')} Бот выставляет каждой заявке "
               "уникальную сумму — на несколько копеек / центов меньше (450.78, 450.77…). "
               "По точной сумме видно, от кого платёж.")
     await show(event, state, f"{prefix}\n\n{text}" if prefix else text, kb.admin_methods(methods))

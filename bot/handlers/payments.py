@@ -62,10 +62,9 @@ async def buy_plan(cb: CallbackQuery, state: FSMContext) -> None:
 
 def order_details(order: Order) -> str:
     return (f"<blockquote>{e('fire')} Тариф: <b>{html.escape(order.plan_name)}</b>\n"
-            f"{e('money')} К оплате: <b><code>{html.escape(order.amount_text.split()[0])}</code> "
-            f"{html.escape(order.amount_text.split()[1])}</b>"
+            f"{e('money')} К оплате: <b>{html.escape(order.amount_text)}</b>"
             f"{f' ({fmt_usd(order.amount_usd)})' if '$' not in order.amount_text else ''}\n"
-            f"{e('wallet')} Адрес / карта: <code>{html.escape(order.address)}</code></blockquote>")
+            f"{e('wallet')} Реквизиты: <b>{html.escape(order.address)}</b></blockquote>")
 
 
 @router.callback_query(F.data.regexp(r"^pay:\d+:\w+$"))
@@ -76,13 +75,12 @@ async def pay(cb: CallbackQuery, state: FSMContext) -> None:
     if order is None:
         return await cb.answer("Этот способ оплаты сейчас недоступен.", show_alert=True)
     method = await q.get_method(method_key)
-    warn = (f"{e('warn')} <b>Переведите ровно {html.escape(order.amount_text)}</b> — до копейки. "
-            "Сумма уникальна для вашей заявки, по ней мы найдём платёж, поэтому комментарий писать "
-            "не нужно. Комиссию банка / сети оплачивайте сверху: прийти должна именно эта сумма.")
+    warn = (f"{e('warn')} <b>Переведите ровно {html.escape(order.amount_text)}</b> — до копейки, "
+            "по этой сумме мы найдём ваш платёж. Комиссию банка / сети оплачивайте сверху.")
     text = (f"{e('receipt')} <b>Заявка #{order.id}</b> · {html.escape(method.title)}\n\n"
             f"{order_details(order)}\n\n{warn}\n\n"
-            "Данные копируются нажатием. После перевода нажмите <b>«Я оплатил»</b> — "
-            "администратор проверит платёж и активирует тариф.")
+            "После перевода нажмите <b>«Я оплатил»</b> — администратор проверит платёж "
+            "и активирует тариф.")
     await show(cb, state, text, kb.order_pay(order.id))
 
 
@@ -129,8 +127,7 @@ def admin_order_text(order: Order, tg_user=None, user_tg_id: int | None = None) 
             f"{e('fire')} {html.escape(order.plan_name)} · {order.days} дн.\n"
             f"{e('money')} <b>{html.escape(order.amount_text)}</b> ({fmt_usd(order.amount_usd)}) · "
             f"{html.escape(order.method)}\n"
-            f"{e('wallet')} <code>{html.escape(order.address)}</code>"
-
+            f"{e('wallet')} {html.escape(order.address)}\n"
             f"{e('calendar')} Оплачено: {paid}")
 
 

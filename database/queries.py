@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta
 
@@ -375,9 +376,21 @@ async def update_method(key: str, **values) -> PaymentMethod | None:
         return method
 
 
+_order_lock = asyncio.Lock()  # выбор уникальной суммы и вставка — без гонок между пользователями
+
+
 async def create_order(user_id: int, plan_id: int, method_key: str) -> Order | None:
     """Создаёт заявку с зафиксированной ценой (со скидкой) и реквизитами."""
+    async with _order_lock:
+        return await _create_order(user_id, plan_id, method_key)
+
+
+async def _create_order(user_id: int, plan_id: int, method_key: str) -> Order | None:
     async with m.session() as s:
+        # прошлые неоплаченные заявки пользователя больше не нужны — освобождаем их суммы
+        await s.execute(
+            update(Order).where(Order.user_id == user_id, Order.status == OrderStatus.NEW)
+            .values(status=OrderStatus.CANCELLED))
         user = await s.get(User, user_id)
         plan = await s.get(Plan, plan_id)
         method = await s.get(PaymentMethod, method_key)
