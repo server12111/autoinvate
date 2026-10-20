@@ -35,8 +35,19 @@ def _path(value: str) -> Path:
 # Всё, что нужно сохранять между перезапусками (база, сессии аккаунтов, эмодзи), лежит в одной
 # папке. На хостинге задайте DATA_DIR=/app/data (или папку, которую он сохраняет).
 DATA_DIR = _path(os.getenv("DATA_DIR", "data"))
-DB_PATH = _path(os.getenv("DB_PATH") or str(DATA_DIR / "invite.db"))
-SESSIONS_DIR = _path(os.getenv("SESSIONS_DIR") or str(DATA_DIR / "sessions"))
+
+
+def _in_data(name: str, default: str) -> Path:
+    """Абсолютный путь — как есть; относительный («sessions», «data/invite.db») — всегда внутри
+    DATA_DIR, чтобы старые переменные окружения не уводили данные из сохраняемой папки."""
+    value = os.getenv(name, "").strip()
+    if value and Path(value).is_absolute():
+        return Path(value)
+    return DATA_DIR / Path(value or default).name
+
+
+DB_PATH = _in_data("DB_PATH", "invite.db")
+SESSIONS_DIR = _in_data("SESSIONS_DIR", "sessions")
 
 DAILY_INVITE_LIMIT = _int("DAILY_INVITE_LIMIT", 40)
 MAX_CONCURRENT_TASKS = _int("MAX_CONCURRENT_TASKS", 3)

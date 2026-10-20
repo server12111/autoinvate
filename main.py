@@ -22,6 +22,7 @@ log = logging.getLogger("main")
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    log.info("Данные: база %s, сессии %s", config.DB_PATH, config.SESSIONS_DIR)
 
     await models.init_db(config.DB_PATH)
     await q.stop_stale_tasks()
